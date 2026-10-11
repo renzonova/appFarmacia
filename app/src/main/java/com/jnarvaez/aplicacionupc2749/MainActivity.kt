@@ -7,6 +7,11 @@ import androidx.activity.enableEdgeToEdge
 import com.jnarvaez.aplicacionupc2749.presentation.screens.inventario.InventarioScreen
 import com.jnarvaez.aplicacionupc2749.ui.theme.AplicacionUPC2749Theme
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import com.jnarvaez.aplicacionupc2749.presentation.screens.login.LoginScreen
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -18,7 +23,13 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             AplicacionUPC2749Theme {
-                InventarioScreen()
+                var sesionIniciada by rememberSaveable { mutableStateOf(false) }
+
+                if (sesionIniciada) {
+                    InventarioScreen()
+                } else {
+                    LoginScreen(onLoginExitoso = { sesionIniciada = true })
+                }
             }
         }
     }

@@ -9,7 +9,8 @@ import retrofit2.http.PUT
 import retrofit2.http.Path
 
 interface FarmaciaApiService {
-
+    @POST("login")
+    suspend fun login(@Body request: LoginRequest): Response<LoginResponse>
     @GET("productos")
     suspend fun getProductos(): Response<List<ProductoDto>>
 
