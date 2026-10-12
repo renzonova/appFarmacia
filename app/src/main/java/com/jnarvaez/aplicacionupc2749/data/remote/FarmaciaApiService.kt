@@ -29,6 +29,16 @@ interface FarmaciaApiService {
     @DELETE("productos/{id}")
     suspend fun eliminarProducto(@Path("id") id: String): Response<Map<String, Any>>
 
+    //Agregado
+    @GET("productos/{id}/movimientos")
+    suspend fun getMovimientos(@Path("id") id: String): Response<List<MovimientoDetalleDto>>
+
+    @POST("productos/{id}/movimientos")
+    suspend fun registrarMovimiento(
+        @Path("id") id: String,
+        @Body datos: MovimientoRequestDto
+    ): Response<MovimientoResponseDto>
+
     @GET("tipos")
     suspend fun getTipos(): Response<List<TipoDto>>
 
