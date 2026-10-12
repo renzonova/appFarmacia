@@ -56,6 +56,9 @@ import com.jnarvaez.aplicacionupc2749.presentation.common.EstadoStock
 import com.jnarvaez.aplicacionupc2749.presentation.common.FiltroChip
 import com.jnarvaez.aplicacionupc2749.presentation.screens.form.FormScreen
 import java.time.LocalDate
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.jnarvaez.aplicacionupc2749.presentation.screens.detalleproducto.DetalleProductoScreen
+
 
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
@@ -66,6 +69,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 fun InventarioScreen(
     viewModel: InventarioViewModel = hiltViewModel()
 ) {
+    var codigoDetalleProducto by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val mensajeNotificacion by viewModel.mensajeNotificacion.collectAsState()
 
@@ -349,6 +353,17 @@ fun InventarioScreen(
     // =====================================================
     // EDITAR PRODUCTO
     // =====================================================
+
+    if (codigoDetalleProducto != null) {
+        DetalleProductoScreen(
+            codigo = codigoDetalleProducto!!,
+            onVolver = {
+                codigoDetalleProducto = null
+                viewModel.cargarProductosDesdeAWS()
+            }
+        )
+        return
+    }
 
     if (productoEditando != null) {
 
@@ -942,6 +957,14 @@ fun InventarioScreen(
                         productoEditando = producto
                     }
                 )
+
+                //Boton para llamar a detalle productos
+                TextButton(
+                    onClick = { codigoDetalleProducto = producto.codigo },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Ver detalle", color = Color(0xFF07566A))
+                }
 
                 Spacer(
                     modifier = Modifier.height(12.dp)

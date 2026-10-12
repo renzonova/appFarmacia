@@ -13,5 +13,15 @@ data class ProductoDto(
     @SerializedName("stock") val stock: Int,
     @SerializedName("minimo") val minimo: Int,
     @SerializedName("unidad") val unidad: String,
-    @SerializedName("estado") val estado: String? = "normal"
+    @SerializedName("estado") val estado: String? = "normal",
+
+    //campos opcionales:
+    @SerializedName("gtin") val gtin: String? = null,
+    @SerializedName("grupo") val grupo: String? = null,
+    @SerializedName("presentacion") val presentacion: String? = null,
+    @SerializedName("conservacion") val conservacion: String? = null,
+    @SerializedName("humedad") val humedad: String? = null,
+    @SerializedName("almacen") val almacen: String? = null,
+    @SerializedName("lotesDetalle") val lotesDetalle: List<LoteDetalleDto>? = null
+
 )
