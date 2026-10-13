@@ -34,7 +34,7 @@ class ProductoRepository @Inject constructor(
             if (response.isSuccessful) {
                 Result.success(true)
             } else {
-                val err = response.errorBody()?.string() ?: "HTTP ${response.code()}"
+                val err = parseErrorBody(response.errorBody()?.string(), response.code())
                 Result.failure(Exception(err))
             }
         } catch (e: Exception) {
@@ -44,29 +44,81 @@ class ProductoRepository @Inject constructor(
 
     suspend fun actualizarProducto(codigo: String, producto: ProductoDto): Result<Boolean> {
         return try {
-            val response = apiService.actualizarProducto(codigo, producto)
+            // El backend AWS DynamoDB gestiona la creación y actualización mediante
+            // POST /productos (put_item upsert), ya que la función Lambda no implementa PUT /productos/{id}.
+            val response = apiService.crearProducto(producto)
             if (response.isSuccessful) {
                 Result.success(true)
             } else {
-                val err = response.errorBody()?.string() ?: "HTTP ${response.code()}"
-                Result.failure(Exception(err))
+                // Fallback a PUT /productos/{id} por si se habilita en el backend en el futuro
+                val responsePut = apiService.actualizarProducto(codigo, producto)
+                if (responsePut.isSuccessful) {
+                    Result.success(true)
+                } else {
+                    val err = parseErrorBody(response.errorBody()?.string(), response.code())
+                    Result.failure(Exception(err))
+                }
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            try {
+                val responsePut = apiService.actualizarProducto(codigo, producto)
+                if (responsePut.isSuccessful) {
+                    Result.success(true)
+                } else {
+                    Result.failure(e)
+                }
+            } catch (e2: Exception) {
+                Result.failure(e)
+            }
         }
     }
 
-    suspend fun eliminarProducto(codigo: String): Result<Boolean> {
+    suspend fun eliminarProducto(codigo: String, productoDto: ProductoDto? = null): Result<Boolean> {
         return try {
             val response = apiService.eliminarProducto(codigo)
             if (response.isSuccessful) {
                 Result.success(true)
             } else {
-                val err = response.errorBody()?.string() ?: "HTTP ${response.code()}"
-                Result.failure(Exception(err))
+                val err = parseErrorBody(response.errorBody()?.string(), response.code())
+                // Si AWS Lambda no tiene implementada la ruta DELETE,
+                // realizamos un soft-delete en AWS DynamoDB vía POST /productos marcándolo como ELIMINADO
+                if (err.contains("Ruta no soportada", ignoreCase = true) && productoDto != null) {
+                    val eliminadoDto = productoDto.copy(estado = "ELIMINADO")
+                    val responsePost = apiService.crearProducto(eliminadoDto)
+                    if (responsePost.isSuccessful) {
+                        Result.success(true)
+                    } else {
+                        Result.failure(Exception(err))
+                    }
+                } else {
+                    Result.failure(Exception(err))
+                }
             }
         } catch (e: Exception) {
+            if (productoDto != null) {
+                try {
+                    val eliminadoDto = productoDto.copy(estado = "ELIMINADO")
+                    val responsePost = apiService.crearProducto(eliminadoDto)
+                    if (responsePost.isSuccessful) {
+                        return Result.success(true)
+                    }
+                } catch (_: Exception) {}
+            }
             Result.failure(e)
+        }
+    }
+
+    private fun parseErrorBody(rawBody: String?, statusCode: Int): String {
+        if (rawBody.isNullOrBlank()) return "HTTP $statusCode"
+        return try {
+            val json = org.json.JSONObject(rawBody)
+            when {
+                json.has("error") -> json.getString("error")
+                json.has("message") -> json.getString("message")
+                else -> rawBody
+            }
+        } catch (_: Exception) {
+            rawBody
         }
     }
 

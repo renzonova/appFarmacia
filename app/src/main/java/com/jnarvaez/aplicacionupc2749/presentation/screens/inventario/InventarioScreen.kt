@@ -52,9 +52,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.statusBarsPadding
 import com.jnarvaez.aplicacionupc2749.presentation.common.EstadoStock
 import com.jnarvaez.aplicacionupc2749.presentation.common.FiltroChip
 import com.jnarvaez.aplicacionupc2749.presentation.screens.form.FormScreen
+import com.jnarvaez.aplicacionupc2749.presentation.screens.movimientos.MovimientosScreen
+import com.jnarvaez.aplicacionupc2749.presentation.screens.mas.MasScreen
 import java.time.LocalDate
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.jnarvaez.aplicacionupc2749.presentation.screens.detalleproducto.DetalleProductoScreen
@@ -67,9 +70,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 
 @Composable
 fun InventarioScreen(
-    viewModel: InventarioViewModel = hiltViewModel()
+    viewModel: InventarioViewModel = hiltViewModel(),
+    pantallaInicial: String = "inventario",
+    codigoInicialDetalle: String? = null,
+    onInicioClick: () -> Unit = {},
+    onCerrarSesion: () -> Unit = {}
 ) {
-    var codigoDetalleProducto by rememberSaveable { mutableStateOf<String?>(null) }
+    var codigoDetalleProducto by rememberSaveable(codigoInicialDetalle) { mutableStateOf(codigoInicialDetalle) }
     val context = LocalContext.current
     val mensajeNotificacion by viewModel.mensajeNotificacion.collectAsState()
 
@@ -84,8 +91,8 @@ fun InventarioScreen(
     // VISTA ACTUAL
     // =====================================================
 
-    var vistaActual by remember {
-        mutableStateOf("inventario")
+    var vistaActual by remember(pantallaInicial) {
+        mutableStateOf(pantallaInicial)
     }
 
     // =====================================================
@@ -371,18 +378,23 @@ fun InventarioScreen(
             producto = productoEditando!!,
 
             onGuardar = { productoActualizado ->
-
+                val codigoOriginal = productoEditando!!.codigo
                 val posicion = productos.indexOfFirst {
-                    it.codigo == productoEditando!!.codigo
+                    it.codigo == codigoOriginal
                 }
 
                 if (posicion >= 0) {
                     productos[posicion] = productoActualizado
                 }
 
-                // Sincronizar automáticamente con AWS DynamoDB
-                viewModel.actualizarProductoEnAWS(productoActualizado)
+                // Sincronizar automáticamente con AWS DynamoDB y registrar en movimientos
+                viewModel.actualizarProductoEnAWS(productoActualizado, codigoOriginal = codigoOriginal)
 
+                productoEditando = null
+            },
+
+            onEliminar = { codigoAEliminar ->
+                viewModel.eliminarProductoEnAWS(codigoAEliminar)
                 productoEditando = null
             },
 
@@ -436,42 +448,31 @@ fun InventarioScreen(
 
 
     // =====================================================
-    // VISTAS EN BLANCO
+    // MOVIMIENTOS DE INVENTARIO
     // =====================================================
 
-    if (vistaActual != "inventario") {
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFFF5F8FC)),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-
-            Text(
-                text = "Vista en blanco",
-                fontSize = 18.sp,
-                color = Color(0xFF65727A)
-            )
-
-            Spacer(
-                modifier = Modifier.height(16.dp)
-            )
-
-            TextButton(
-                onClick = {
-                    vistaActual = "inventario"
-                }
-            ) {
-
-                Text(
-                    text = "Volver al Inventario",
-                    color = Color(0xFF07566A)
-                )
+    if (vistaActual == "movimientos") {
+        MovimientosScreen(
+            movimientos = viewModel.movimientos,
+            onVolver = {
+                vistaActual = "inventario"
             }
-        }
+        )
+        return
+    }
 
+
+    // =====================================================
+    // MÁS / INFORMACIÓN DE LA APLICACIÓN
+    // =====================================================
+
+    if (vistaActual == "mas") {
+        MasScreen(
+            onVolver = {
+                vistaActual = "inventario"
+            },
+            onCerrarSesion = onCerrarSesion
+        )
         return
     }
 
@@ -545,6 +546,7 @@ fun InventarioScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFF5F8FC))
+            .statusBarsPadding()
     ) {
 
         Column(
@@ -1036,7 +1038,7 @@ fun InventarioScreen(
                 texto = "Inicio",
                 seleccionado = false,
                 onClick = {
-                    vistaActual = "inicio"
+                    onInicioClick()
                 }
             )
 

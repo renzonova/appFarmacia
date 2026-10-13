@@ -14,10 +14,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,11 +40,11 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun EditarProductoScreen(
     producto: Producto,
-    onGuardar: (
-        Producto
-    ) -> Unit,
+    onGuardar: (Producto) -> Unit,
+    onEliminar: (String) -> Unit = {},
     onCancelar: () -> Unit
 ) {
+    var mostrarDialogoEliminar by remember { mutableStateOf(false) }
 
     var codigo by remember {
         mutableStateOf(producto.codigo)
@@ -475,6 +480,60 @@ fun EditarProductoScreen(
                     color = Color.White
                 )
             }
+        }
+
+        Spacer(
+            modifier = Modifier.height(14.dp)
+        )
+
+        // BOTÓN ELIMINAR MEDICAMENTO
+        OutlinedButton(
+            onClick = { mostrarDialogoEliminar = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = Color(0xFFBA1A1A)
+            ),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBA1A1A))
+        ) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = null,
+                tint = Color(0xFFBA1A1A)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "ELIMINAR MEDICAMENTO",
+                color = Color(0xFFBA1A1A),
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+            )
+        }
+
+        if (mostrarDialogoEliminar) {
+            AlertDialog(
+                onDismissRequest = { mostrarDialogoEliminar = false },
+                title = { Text("¿Eliminar medicamento?") },
+                text = {
+                    Text(
+                        "¿Estás seguro de que deseas dar de baja y eliminar \"${producto.producto}\"?\n\nEsta acción quedará registrada en el historial de movimientos de inventario."
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            mostrarDialogoEliminar = false
+                            onEliminar(producto.codigo)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBA1A1A))
+                    ) {
+                        Text("Eliminar definitivamente", color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { mostrarDialogoEliminar = false }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
         }
 
         Spacer(

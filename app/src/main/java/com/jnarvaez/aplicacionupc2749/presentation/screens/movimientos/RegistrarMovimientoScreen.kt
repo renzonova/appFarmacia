@@ -61,8 +61,11 @@ fun RegistrarMovimientoScreen(
             }
             if (errorLocal == null && n != null) {
                 enviado = true
-                viewModel.registrar(producto.id, MovimientoRequestDto(
-                    tipo.trim(), descripcion.trim(), lote.trim(), n, responsable.trim()))
+                viewModel.registrar(
+                    producto.id,
+                    MovimientoRequestDto(tipo.trim(), descripcion.trim(), lote.trim(), n, responsable.trim()),
+                    productoNombre = producto.producto
+                )
             }
         }, enabled = !enviado, modifier = Modifier.fillMaxWidth()) {
             Text(if (estado.guardando) "Guardando…" else "Guardar movimiento")

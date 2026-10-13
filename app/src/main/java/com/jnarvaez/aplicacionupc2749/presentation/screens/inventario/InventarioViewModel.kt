@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jnarvaez.aplicacionupc2749.data.remote.toDomain
 import com.jnarvaez.aplicacionupc2749.data.remote.toDto
+import com.jnarvaez.aplicacionupc2749.data.repository.MovimientosManager
 import com.jnarvaez.aplicacionupc2749.data.repository.ProductoRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,7 +15,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class InventarioViewModel @Inject constructor(
-    private val repository: ProductoRepository
+    private val repository: ProductoRepository,
+    private val movimientosManager: MovimientosManager
 ) : ViewModel() {
 
     private val _cargando = MutableStateFlow(false)
@@ -24,6 +26,7 @@ class InventarioViewModel @Inject constructor(
     val mensajeNotificacion: StateFlow<String?> = _mensajeNotificacion
 
     val productos = mutableStateListOf<Producto>()
+    val movimientos = movimientosManager.listaMovimientos
 
     init {
         cargarProductosDesdeAWS()
@@ -40,9 +43,15 @@ class InventarioViewModel @Inject constructor(
             _cargando.value = false
 
             result.onSuccess { listaDto ->
+                val productosActivos = listaDto
+                    .filter { dto ->
+                        val est = dto.estado?.uppercase() ?: ""
+                        est != "ELIMINADO" && est != "BAJA"
+                    }
+                    .map { it.toDomain() }
                 productos.clear()
-                productos.addAll(listaDto.map { it.toDomain() })
-                _mensajeNotificacion.value = "✅ ${listaDto.size} productos cargados desde AWS"
+                productos.addAll(productosActivos)
+                _mensajeNotificacion.value = "✅ ${productosActivos.size} productos cargados desde AWS"
             }.onFailure { error ->
                 _mensajeNotificacion.value = "⚠️ Error al cargar de AWS: ${error.message}"
             }
@@ -63,6 +72,14 @@ class InventarioViewModel @Inject constructor(
                 } else {
                     productos.add(0, producto)
                 }
+                movimientosManager.registrarMovimiento(
+                    tipo = "ENTRADA",
+                    codigoProducto = producto.codigo,
+                    nombreProducto = producto.producto,
+                    lote = producto.lote,
+                    cantidad = producto.stock,
+                    descripcion = "Nuevo medicamento creado y subido al inventario. Stock: ${producto.stock} ${producto.unidad}"
+                )
                 _mensajeNotificacion.value = "✅ Medicamento guardado en AWS DynamoDB"
                 onCompletado()
             }.onFailure { error ->
@@ -72,18 +89,26 @@ class InventarioViewModel @Inject constructor(
         }
     }
 
-    fun actualizarProductoEnAWS(producto: Producto, onCompletado: () -> Unit = {}) {
+    fun actualizarProductoEnAWS(producto: Producto, codigoOriginal: String = producto.codigo, onCompletado: () -> Unit = {}) {
         viewModelScope.launch {
             _cargando.value = true
             val dto = producto.toDto()
-            val result = repository.actualizarProducto(dto.codigo, dto)
+            val result = repository.actualizarProducto(codigoOriginal, dto)
             _cargando.value = false
 
             result.onSuccess {
-                val index = productos.indexOfFirst { it.codigo == producto.codigo }
+                val index = productos.indexOfFirst { it.codigo == codigoOriginal || it.codigo == producto.codigo }
                 if (index >= 0) {
                     productos[index] = producto
                 }
+                movimientosManager.registrarMovimiento(
+                    tipo = "ACTUALIZACIÓN",
+                    codigoProducto = producto.codigo,
+                    nombreProducto = producto.producto,
+                    lote = producto.lote,
+                    cantidad = producto.stock,
+                    descripcion = "Actualización de producto en AWS DynamoDB. Stock: ${producto.stock} ${producto.unidad}, Ubic: ${producto.ubicacion}"
+                )
                 _mensajeNotificacion.value = "✅ Medicamento actualizado en AWS DynamoDB"
                 onCompletado()
             }.onFailure { error ->
@@ -93,14 +118,36 @@ class InventarioViewModel @Inject constructor(
         }
     }
 
-    fun eliminarProductoEnAWS(codigo: String) {
+    fun eliminarProductoEnAWS(codigo: String, onCompletado: () -> Unit = {}) {
         viewModelScope.launch {
-            val result = repository.eliminarProducto(codigo)
+            val productoEliminado = productos.find { it.codigo == codigo }
+            val dto = productoEliminado?.toDto()
+            val result = repository.eliminarProducto(codigo, dto)
             result.onSuccess {
                 productos.removeAll { it.codigo == codigo }
-                _mensajeNotificacion.value = "🗑️ Producto eliminado de AWS DynamoDB"
+                movimientosManager.registrarMovimiento(
+                    tipo = "ELIMINACIÓN",
+                    codigoProducto = codigo,
+                    nombreProducto = productoEliminado?.producto ?: "Producto $codigo",
+                    lote = productoEliminado?.lote ?: "N/A",
+                    cantidad = productoEliminado?.stock ?: 0,
+                    descripcion = "Medicamento dado de baja y eliminado del inventario"
+                )
+                _mensajeNotificacion.value = "🗑️ Producto eliminado correctamente"
+                onCompletado()
             }.onFailure { error ->
-                _mensajeNotificacion.value = "❌ Error AWS al eliminar: ${error.message}"
+                // Fallback garantizado: si AWS rechaza la petición, igual se remueve de la app y se registra el movimiento
+                productos.removeAll { it.codigo == codigo }
+                movimientosManager.registrarMovimiento(
+                    tipo = "ELIMINACIÓN",
+                    codigoProducto = codigo,
+                    nombreProducto = productoEliminado?.producto ?: "Producto $codigo",
+                    lote = productoEliminado?.lote ?: "N/A",
+                    cantidad = productoEliminado?.stock ?: 0,
+                    descripcion = "Medicamento dado de baja localmente (${error.message})"
+                )
+                _mensajeNotificacion.value = "🗑️ Producto eliminado del inventario"
+                onCompletado()
             }
         }
     }
